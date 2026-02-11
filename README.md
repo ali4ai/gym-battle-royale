@@ -65,25 +65,28 @@ print(info)
 - Observation spotlight (clear) with blurry/dark outer area
 
 
-## Training with RSL-RL
+## Training with Stable-Baselines3 (PPO)
 
 A ready-to-use training entrypoint is included:
 
 ```bash
-PYTHONPATH=src python -m gym_battle_royale.rsl_rl_training   --num-envs 64   --iterations 1000   --steps-per-env 24   --device cpu
+PYTHONPATH=src python -m gym_battle_royale.sb3_training \
+  --num-envs 8 \
+  --timesteps 1000000 \
+  --device cpu
 ```
 
 What this script provides:
 
-- Vectorized wrapper (`RslVecBattleRoyaleEnv`) over multiple Gym env instances
-- Flattened observations for actor-critic networks
-- Multi-discrete action decoding from concatenated logits
-- PPO runner config for RSL-RL (`OnPolicyRunner`)
+- Vectorized training across multiple env instances (`DummyVecEnv`)
+- PPO training with `MultiInputPolicy` on the environment's dict observation
+- Automatic checkpointing and periodic evaluation callbacks
+- Final model export to `runs/sb3_battle_royale/ppo_battle_royale_final.zip`
 
 Notes:
 
-- Requires `rsl_rl` and `torch` installed in your environment.
-- Outputs logs/checkpoints to `runs/rsl_rl_battle_royale` by default.
+- Requires `stable-baselines3` and `torch` installed.
+- Outputs logs/checkpoints to `runs/sb3_battle_royale` by default.
 
 ## Demo: random-action video
 
