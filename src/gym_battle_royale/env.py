@@ -40,7 +40,7 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
     - 7: swap weapon slot (0=none, 1..4)
     """
 
-    metadata = {"render_modes": ["ansi"], "render_fps": 15}
+    metadata = {"render_modes": ["ansi", "rgb_array"], "render_fps": 15}
 
     def __init__(
         self,
@@ -48,13 +48,23 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
         enemy_count: int = 23,
         loot_count: int = 60,
         max_steps: int = 2400,
+        render_mode: str | None = None,
+        render_size: int = 640,
         seed: int | None = None,
     ) -> None:
         super().__init__()
+        if render_mode not in [None, "ansi", "rgb_array"]:
+            raise ValueError(
+                f"Unsupported render_mode={render_mode!r}. "
+                f"Expected one of {self.metadata['render_modes']} or None."
+            )
+
         self.map_size = map_size
         self.enemy_count = enemy_count
         self.loot_count = loot_count
         self.max_steps = max_steps
+        self.render_mode = render_mode
+        self.render_size = max(200, int(render_size))
         self.rng = np.random.default_rng(seed)
 
         # move, aim_x, aim_y, attack, interact, reload, heal, switch weapon
@@ -187,7 +197,10 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
 
         return self._build_obs(), reward, terminated, truncated, self._info()
 
-    def render(self) -> str:
+    def render(self) -> str | np.ndarray:
+        if self.render_mode == "rgb_array":
+            return self._render_rgb_array()
+
         alive_enemies = sum(1 for e in self.enemies if e["alive"])
         pos = self.player["pos"]
         return (
@@ -436,3 +449,82 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
             "alive_enemies": sum(1 for e in self.enemies if e["alive"]),
             "zone_radius": self.zone_radius,
         }
+
+    def _to_canvas_point(self, world_point: np.ndarray) -> tuple[int, int]:
+        px = int(np.clip((world_point[0] / self.map_size) * (self.render_size - 1), 0, self.render_size - 1))
+        py = int(np.clip((world_point[1] / self.map_size) * (self.render_size - 1), 0, self.render_size - 1))
+        return px, py
+
+    def _draw_disk(self, canvas: np.ndarray, center: tuple[int, int], radius: int, color: tuple[int, int, int]) -> None:
+        cx, cy = center
+        x0, x1 = max(0, cx - radius), min(canvas.shape[1] - 1, cx + radius)
+        y0, y1 = max(0, cy - radius), min(canvas.shape[0] - 1, cy + radius)
+        for y in range(y0, y1 + 1):
+            dy = y - cy
+            for x in range(x0, x1 + 1):
+                dx = x - cx
+                if dx * dx + dy * dy <= radius * radius:
+                    canvas[y, x] = color
+
+    def _draw_line(self, canvas: np.ndarray, start: tuple[int, int], end: tuple[int, int], color: tuple[int, int, int]) -> None:
+        x0, y0 = start
+        x1, y1 = end
+        steps = max(abs(x1 - x0), abs(y1 - y0), 1)
+        for i in range(steps + 1):
+            t = i / steps
+            x = int(round(x0 + (x1 - x0) * t))
+            y = int(round(y0 + (y1 - y0) * t))
+            if 0 <= x < canvas.shape[1] and 0 <= y < canvas.shape[0]:
+                canvas[y, x] = color
+
+    def _render_rgb_array(self) -> np.ndarray:
+        canvas = np.zeros((self.render_size, self.render_size, 3), dtype=np.uint8)
+        canvas[:] = np.array([46, 112, 64], dtype=np.uint8)  # grass
+
+        zone_center_px = self._to_canvas_point(self.zone_center)
+        zone_radius_px = max(1, int((self.zone_radius / self.map_size) * self.render_size))
+
+        # Gas overlay outside the safe zone.
+        yy, xx = np.ogrid[: self.render_size, : self.render_size]
+        dist2 = (xx - zone_center_px[0]) ** 2 + (yy - zone_center_px[1]) ** 2
+        gas_mask = dist2 > zone_radius_px * zone_radius_px
+        canvas[gas_mask] = (canvas[gas_mask] * 0.55 + np.array([120, 90, 40], dtype=np.float32) * 0.45).astype(np.uint8)
+
+        # Zone ring.
+        ring_mask = (dist2 > (zone_radius_px - 2) ** 2) & (dist2 < (zone_radius_px + 2) ** 2)
+        canvas[ring_mask] = np.array([230, 214, 82], dtype=np.uint8)
+
+        loot_colors = {
+            "ammo": (63, 158, 255),
+            "medkit": (250, 77, 87),
+            "armor": (133, 97, 255),
+            "weapon": (235, 235, 235),
+        }
+        for item in self.loot:
+            p = self._to_canvas_point(item["pos"])
+            self._draw_disk(canvas, p, radius=2, color=loot_colors[str(item["kind"])])
+
+        for enemy in self.enemies:
+            if not enemy["alive"]:
+                continue
+            p = self._to_canvas_point(enemy["pos"])
+            self._draw_disk(canvas, p, radius=4, color=(220, 62, 62))
+
+        player_pos = self._to_canvas_point(self.player["pos"])
+        self._draw_disk(canvas, player_pos, radius=5, color=(72, 167, 255))
+
+        aim_end_world = self.player["pos"] + self.player["aim"] * 10.0
+        aim_end = self._to_canvas_point(aim_end_world)
+        self._draw_line(canvas, player_pos, aim_end, color=(255, 255, 255))
+
+        # Health and armor bars (HUD).
+        hud_y = 10
+        bar_w = self.render_size // 4
+        hp_w = int(bar_w * (max(0.0, self.player["health"]) / 100.0))
+        armor_w = int(bar_w * (max(0.0, self.player["armor"]) / 100.0))
+        canvas[hud_y : hud_y + 8, 10 : 10 + bar_w] = (45, 45, 45)
+        canvas[hud_y : hud_y + 8, 10 : 10 + hp_w] = (58, 216, 88)
+        canvas[hud_y + 12 : hud_y + 20, 10 : 10 + bar_w] = (45, 45, 45)
+        canvas[hud_y + 12 : hud_y + 20, 10 : 10 + armor_w] = (85, 169, 255)
+
+        return canvas

@@ -15,6 +15,7 @@ This repository provides a **single-player Gymnasium environment** that mimics t
 - **Loot interaction** (ammo/armor/medkits/weapons)
 - **Enemy bots** with simple chase/strafe/shoot behavior
 - **Shrinking safe zone** with increasing gas damage
+- **Visual rendering** via `render_mode="rgb_array"`
 - Gymnasium-compatible API (`reset`, `step`, observation/action spaces)
 
 ## Install
@@ -29,17 +30,29 @@ pip install -e .
 import gymnasium as gym
 import gym_battle_royale  # registers env
 
-env = gym.make("BattleRoyale2D-v0", enemy_count=30)
+env = gym.make("BattleRoyale2D-v0", enemy_count=30, render_mode="rgb_array")
 obs, info = env.reset(seed=42)
 
 for _ in range(500):
     action = env.action_space.sample()
     obs, reward, terminated, truncated, info = env.step(action)
+    frame = env.render()  # np.ndarray (H, W, 3), dtype=uint8
     if terminated or truncated:
         break
 
 print(info)
 ```
+
+## Render modes
+
+- `render_mode="ansi"` (default behavior): returns compact text state.
+- `render_mode="rgb_array"`: returns a top-down image frame with:
+  - player (blue)
+  - enemies (red)
+  - loot by type color
+  - safe-zone ring + gas outside zone
+  - player aim line
+  - HP and armor HUD bars
 
 ## Action space
 
@@ -88,5 +101,5 @@ UI-only actions (fullscreen map, minimap toggle, emotes, pings, settings) are in
 ## Notes
 
 - Designed for **single-player** training/evaluation.
-- Rendering is currently textual (`render()` returns a compact state string).
-- You can extend this base with pixel rendering, recoil, ballistic simulation, and richer bot policies.
+- Visual output is generated directly as a NumPy RGB frame.
+- You can extend this base with real-time windows (pygame), recoil, ballistic simulation, and richer bot policies.
