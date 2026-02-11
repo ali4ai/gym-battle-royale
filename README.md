@@ -64,6 +64,27 @@ print(info)
 - HP and armor HUD bars
 - Observation spotlight (clear) with blurry/dark outer area
 
+
+## Training with RSL-RL
+
+A ready-to-use training entrypoint is included:
+
+```bash
+PYTHONPATH=src python -m gym_battle_royale.rsl_rl_training   --num-envs 64   --iterations 1000   --steps-per-env 24   --device cpu
+```
+
+What this script provides:
+
+- Vectorized wrapper (`RslVecBattleRoyaleEnv`) over multiple Gym env instances
+- Flattened observations for actor-critic networks
+- Multi-discrete action decoding from concatenated logits
+- PPO runner config for RSL-RL (`OnPolicyRunner`)
+
+Notes:
+
+- Requires `rsl_rl` and `torch` installed in your environment.
+- Outputs logs/checkpoints to `runs/rsl_rl_battle_royale` by default.
+
 ## Demo: random-action video
 
 Generate a random-policy gameplay video:

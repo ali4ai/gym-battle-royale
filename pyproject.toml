@@ -17,3 +17,10 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+[project.optional-dependencies]
+train = [
+  "torch>=2.1",
+  "rsl-rl>=1.0",
+]
