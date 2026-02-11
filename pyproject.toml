@@ -11,6 +11,8 @@ requires-python = ">=3.10"
 dependencies = [
   "gymnasium>=0.29",
   "numpy>=1.24",
+  "pygame>=2.5",
+  "imageio>=2.34",
 ]
 
 [tool.setuptools.packages.find]

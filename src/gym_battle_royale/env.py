@@ -40,7 +40,7 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
     - 7: swap weapon slot (0=none, 1..4)
     """
 
-    metadata = {"render_modes": ["ansi", "rgb_array"], "render_fps": 15}
+    metadata = {"render_modes": ["ansi", "rgb_array", "human"], "render_fps": 15}
 
     def __init__(
         self,
@@ -49,11 +49,12 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
         loot_count: int = 60,
         max_steps: int = 2400,
         render_mode: str | None = None,
-        render_size: int = 640,
+        render_size: int = 720,
+        observation_radius: float = 34.0,
         seed: int | None = None,
     ) -> None:
         super().__init__()
-        if render_mode not in [None, "ansi", "rgb_array"]:
+        if render_mode not in [None, "ansi", "rgb_array", "human"]:
             raise ValueError(
                 f"Unsupported render_mode={render_mode!r}. "
                 f"Expected one of {self.metadata['render_modes']} or None."
@@ -64,8 +65,13 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
         self.loot_count = loot_count
         self.max_steps = max_steps
         self.render_mode = render_mode
-        self.render_size = max(200, int(render_size))
+        self.render_size = max(240, int(render_size))
+        self.observation_radius = max(10.0, observation_radius)
         self.rng = np.random.default_rng(seed)
+
+        self._pygame = None
+        self._screen = None
+        self._clock = None
 
         # move, aim_x, aim_y, attack, interact, reload, heal, switch weapon
         self.action_space = spaces.MultiDiscrete(np.array([9, 11, 11, 2, 2, 2, 2, 5]))
@@ -197,18 +203,33 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
 
         return self._build_obs(), reward, terminated, truncated, self._info()
 
-    def render(self) -> str | np.ndarray:
-        if self.render_mode == "rgb_array":
-            return self._render_rgb_array()
+    def render(self) -> str | np.ndarray | None:
+        if self.render_mode == "ansi" or self.render_mode is None:
+            alive_enemies = sum(1 for e in self.enemies if e["alive"])
+            pos = self.player["pos"]
+            return (
+                f"Step={self.step_count} pos=({pos[0]:.1f},{pos[1]:.1f}) "
+                f"hp={self.player['health']:.1f} armor={self.player['armor']:.1f} "
+                f"kills={self.player['kills']} enemies_left={alive_enemies} "
+                f"zone_radius={self.zone_radius:.1f}"
+            )
 
-        alive_enemies = sum(1 for e in self.enemies if e["alive"])
-        pos = self.player["pos"]
-        return (
-            f"Step={self.step_count} pos=({pos[0]:.1f},{pos[1]:.1f}) "
-            f"hp={self.player['health']:.1f} armor={self.player['armor']:.1f} "
-            f"kills={self.player['kills']} enemies_left={alive_enemies} "
-            f"zone_radius={self.zone_radius:.1f}"
-        )
+        frame = self._render_pygame_frame()
+
+        if self.render_mode == "rgb_array":
+            return frame
+
+        self._blit_human(frame)
+        return None
+
+    def close(self) -> None:
+        if self._pygame is not None:
+            if self._screen is not None:
+                self._pygame.display.quit()
+            self._pygame.quit()
+        self._pygame = None
+        self._screen = None
+        self._clock = None
 
     def _apply_movement(self, move: int) -> None:
         directions = {
@@ -390,7 +411,9 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
     def _spawn_loot(self) -> dict[str, Any]:
         return {
             "pos": self._random_point_in_circle(self.zone_center, self.zone_radius * 0.98),
-            "kind": self.rng.choice(["ammo", "medkit", "armor", "weapon"], p=[0.45, 0.2, 0.2, 0.15]),
+            "kind": self.rng.choice(
+                ["ammo", "medkit", "armor", "weapon"], p=[0.45, 0.2, 0.2, 0.15]
+            ),
             "value": float(self.rng.choice([1.0, 1.0, 2.0, 3.0])),
         }
 
@@ -423,7 +446,9 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
             enemies[i, 2] = enemy["health"] / 100 * 2 - 1
             enemies[i, 3] = enemy["armor"] / 100 * 2 - 1
             enemies[i, 4] = 1.0 if enemy["alive"] else -1.0
-            enemies[i, 5] = min(1.0, np.linalg.norm(enemy["pos"] - self.player["pos"]) / 40) * 2 - 1
+            enemies[i, 5] = (
+                min(1.0, np.linalg.norm(enemy["pos"] - self.player["pos"]) / 40) * 2 - 1
+            )
 
         loot = np.zeros((self.max_loot_tracked, 5), dtype=np.float32)
         kind_map = {"ammo": -1.0, "medkit": -0.3, "armor": 0.3, "weapon": 1.0}
@@ -431,7 +456,9 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
             loot[i, 0:2] = item["pos"] / self.map_size * 2 - 1
             loot[i, 2] = kind_map[str(item["kind"])]
             loot[i, 3] = item["value"] / 3.0 * 2 - 1
-            loot[i, 4] = min(1.0, np.linalg.norm(item["pos"] - self.player["pos"]) / 35) * 2 - 1
+            loot[i, 4] = (
+                min(1.0, np.linalg.norm(item["pos"] - self.player["pos"]) / 35) * 2 - 1
+            )
 
         zone = np.zeros(4, dtype=np.float32)
         zone[0:2] = self.zone_center / self.map_size * 2 - 1
@@ -450,81 +477,146 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
             "zone_radius": self.zone_radius,
         }
 
+    def _ensure_pygame(self):
+        if self._pygame is None:
+            try:
+                import pygame
+            except ImportError as exc:
+                raise ImportError(
+                    "pygame is required for rgb_array/human rendering. "
+                    "Install dependencies with `pip install -e .`."
+                ) from exc
+            self._pygame = pygame
+        return self._pygame
+
     def _to_canvas_point(self, world_point: np.ndarray) -> tuple[int, int]:
-        px = int(np.clip((world_point[0] / self.map_size) * (self.render_size - 1), 0, self.render_size - 1))
-        py = int(np.clip((world_point[1] / self.map_size) * (self.render_size - 1), 0, self.render_size - 1))
+        px = int(
+            np.clip(
+                (world_point[0] / self.map_size) * (self.render_size - 1),
+                0,
+                self.render_size - 1,
+            )
+        )
+        py = int(
+            np.clip(
+                (world_point[1] / self.map_size) * (self.render_size - 1),
+                0,
+                self.render_size - 1,
+            )
+        )
         return px, py
 
-    def _draw_disk(self, canvas: np.ndarray, center: tuple[int, int], radius: int, color: tuple[int, int, int]) -> None:
-        cx, cy = center
-        x0, x1 = max(0, cx - radius), min(canvas.shape[1] - 1, cx + radius)
-        y0, y1 = max(0, cy - radius), min(canvas.shape[0] - 1, cy + radius)
-        for y in range(y0, y1 + 1):
-            dy = y - cy
-            for x in range(x0, x1 + 1):
-                dx = x - cx
-                if dx * dx + dy * dy <= radius * radius:
-                    canvas[y, x] = color
+    def _pixelate(self, frame: np.ndarray, block: int = 9) -> np.ndarray:
+        h, w, _ = frame.shape
+        block = max(2, block)
+        small = frame[::block, ::block]
+        return np.repeat(np.repeat(small, block, axis=0), block, axis=1)[:h, :w]
 
-    def _draw_line(self, canvas: np.ndarray, start: tuple[int, int], end: tuple[int, int], color: tuple[int, int, int]) -> None:
-        x0, y0 = start
-        x1, y1 = end
-        steps = max(abs(x1 - x0), abs(y1 - y0), 1)
-        for i in range(steps + 1):
-            t = i / steps
-            x = int(round(x0 + (x1 - x0) * t))
-            y = int(round(y0 + (y1 - y0) * t))
-            if 0 <= x < canvas.shape[1] and 0 <= y < canvas.shape[0]:
-                canvas[y, x] = color
+    def _draw_loot_icon(self, surface, item_kind: str, p: tuple[int, int]) -> None:
+        pygame = self._ensure_pygame()
+        x, y = p
+        if item_kind == "ammo":
+            pygame.draw.rect(surface, (70, 165, 255), pygame.Rect(x - 3, y - 3, 6, 6), border_radius=1)
+        elif item_kind == "medkit":
+            pygame.draw.rect(surface, (235, 72, 72), pygame.Rect(x - 4, y - 4, 8, 8), border_radius=2)
+            pygame.draw.rect(surface, (255, 255, 255), pygame.Rect(x - 1, y - 3, 2, 6))
+            pygame.draw.rect(surface, (255, 255, 255), pygame.Rect(x - 3, y - 1, 6, 2))
+        elif item_kind == "armor":
+            pts = [(x, y - 5), (x + 4, y - 2), (x + 3, y + 4), (x - 3, y + 4), (x - 4, y - 2)]
+            pygame.draw.polygon(surface, (154, 110, 255), pts)
+        else:  # weapon
+            pts = [(x - 4, y + 3), (x + 5, y), (x - 4, y - 3)]
+            pygame.draw.polygon(surface, (230, 230, 230), pts)
 
-    def _render_rgb_array(self) -> np.ndarray:
-        canvas = np.zeros((self.render_size, self.render_size, 3), dtype=np.uint8)
-        canvas[:] = np.array([46, 112, 64], dtype=np.uint8)  # grass
+    def _render_pygame_frame(self) -> np.ndarray:
+        pygame = self._ensure_pygame()
+        surface = pygame.Surface((self.render_size, self.render_size))
 
-        zone_center_px = self._to_canvas_point(self.zone_center)
-        zone_radius_px = max(1, int((self.zone_radius / self.map_size) * self.render_size))
+        # Ground
+        surface.fill((44, 112, 62))
 
-        # Gas overlay outside the safe zone.
-        yy, xx = np.ogrid[: self.render_size, : self.render_size]
-        dist2 = (xx - zone_center_px[0]) ** 2 + (yy - zone_center_px[1]) ** 2
-        gas_mask = dist2 > zone_radius_px * zone_radius_px
-        canvas[gas_mask] = (canvas[gas_mask] * 0.55 + np.array([120, 90, 40], dtype=np.float32) * 0.45).astype(np.uint8)
+        # Gas overlay and safe zone ring
+        zone_center = self._to_canvas_point(self.zone_center)
+        zone_radius = max(2, int((self.zone_radius / self.map_size) * self.render_size))
 
-        # Zone ring.
-        ring_mask = (dist2 > (zone_radius_px - 2) ** 2) & (dist2 < (zone_radius_px + 2) ** 2)
-        canvas[ring_mask] = np.array([230, 214, 82], dtype=np.uint8)
+        gas_overlay = pygame.Surface((self.render_size, self.render_size), pygame.SRCALPHA)
+        gas_overlay.fill((212, 130, 42, 88))
+        pygame.draw.circle(gas_overlay, (0, 0, 0, 0), zone_center, zone_radius)
+        surface.blit(gas_overlay, (0, 0))
+        pygame.draw.circle(surface, (235, 213, 78), zone_center, zone_radius, width=3)
 
-        loot_colors = {
-            "ammo": (63, 158, 255),
-            "medkit": (250, 77, 87),
-            "armor": (133, 97, 255),
-            "weapon": (235, 235, 235),
-        }
+        # Loot with icons
         for item in self.loot:
-            p = self._to_canvas_point(item["pos"])
-            self._draw_disk(canvas, p, radius=2, color=loot_colors[str(item["kind"])])
+            self._draw_loot_icon(surface, str(item["kind"]), self._to_canvas_point(item["pos"]))
 
+        # Enemies
         for enemy in self.enemies:
             if not enemy["alive"]:
                 continue
             p = self._to_canvas_point(enemy["pos"])
-            self._draw_disk(canvas, p, radius=4, color=(220, 62, 62))
+            pygame.draw.circle(surface, (220, 56, 56), p, 7)
+            hp_ratio = np.clip(enemy["health"] / 100.0, 0.0, 1.0)
+            pygame.draw.circle(surface, (255, 255, 255), p, 9, width=1)
+            pygame.draw.arc(
+                surface,
+                (82, 225, 82),
+                pygame.Rect(p[0] - 9, p[1] - 9, 18, 18),
+                0,
+                2 * np.pi * hp_ratio,
+                width=2,
+            )
 
-        player_pos = self._to_canvas_point(self.player["pos"])
-        self._draw_disk(canvas, player_pos, radius=5, color=(72, 167, 255))
+        # Player
+        player_p = self._to_canvas_point(self.player["pos"])
+        pygame.draw.circle(surface, (72, 170, 255), player_p, 9)
+        pygame.draw.circle(surface, (255, 255, 255), player_p, 11, width=2)
 
-        aim_end_world = self.player["pos"] + self.player["aim"] * 10.0
-        aim_end = self._to_canvas_point(aim_end_world)
-        self._draw_line(canvas, player_pos, aim_end, color=(255, 255, 255))
+        aim_end = self._to_canvas_point(self.player["pos"] + self.player["aim"] * 12.0)
+        pygame.draw.line(surface, (250, 250, 250), player_p, aim_end, width=2)
 
-        # Health and armor bars (HUD).
-        hud_y = 10
+        # Fog of war: keep local area sharp, blur everything else.
+        frame = np.transpose(pygame.surfarray.array3d(surface), (1, 0, 2))
+        blurred = self._pixelate(frame, block=max(4, self.render_size // 120))
+
+        yy, xx = np.ogrid[: self.render_size, : self.render_size]
+        obs_radius_px = int((self.observation_radius / self.map_size) * self.render_size)
+        obs_radius_px = max(20, obs_radius_px)
+        dist2 = (xx - player_p[0]) ** 2 + (yy - player_p[1]) ** 2
+        visible_mask = dist2 <= obs_radius_px * obs_radius_px
+
+        final_frame = blurred
+        final_frame[visible_mask] = frame[visible_mask]
+
+        # Slight darkening for hidden region.
+        hidden_mask = ~visible_mask
+        final_frame[hidden_mask] = (final_frame[hidden_mask] * 0.65).astype(np.uint8)
+
+        # HUD
+        hp_ratio = np.clip(self.player["health"] / 100.0, 0.0, 1.0)
+        armor_ratio = np.clip(self.player["armor"] / 100.0, 0.0, 1.0)
         bar_w = self.render_size // 4
-        hp_w = int(bar_w * (max(0.0, self.player["health"]) / 100.0))
-        armor_w = int(bar_w * (max(0.0, self.player["armor"]) / 100.0))
-        canvas[hud_y : hud_y + 8, 10 : 10 + bar_w] = (45, 45, 45)
-        canvas[hud_y : hud_y + 8, 10 : 10 + hp_w] = (58, 216, 88)
-        canvas[hud_y + 12 : hud_y + 20, 10 : 10 + bar_w] = (45, 45, 45)
-        canvas[hud_y + 12 : hud_y + 20, 10 : 10 + armor_w] = (85, 169, 255)
+        final_frame[12:24, 12 : 12 + bar_w] = (40, 40, 40)
+        final_frame[12:24, 12 : 12 + int(bar_w * hp_ratio)] = (62, 214, 92)
+        final_frame[30:42, 12 : 12 + bar_w] = (40, 40, 40)
+        final_frame[30:42, 12 : 12 + int(bar_w * armor_ratio)] = (82, 164, 255)
 
-        return canvas
+        return final_frame
+
+    def _blit_human(self, frame: np.ndarray) -> None:
+        pygame = self._ensure_pygame()
+        if self._screen is None:
+            pygame.init()
+            self._screen = pygame.display.set_mode((self.render_size, self.render_size))
+            pygame.display.set_caption("BattleRoyale2DEnv")
+            self._clock = pygame.time.Clock()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.close()
+                return
+
+        surface = pygame.surfarray.make_surface(np.transpose(frame, (1, 0, 2)))
+        self._screen.blit(surface, (0, 0))
+        pygame.display.flip()
+        if self._clock is not None:
+            self._clock.tick(self.metadata["render_fps"])

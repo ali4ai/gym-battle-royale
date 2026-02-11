@@ -15,7 +15,8 @@ This repository provides a **single-player Gymnasium environment** that mimics t
 - **Loot interaction** (ammo/armor/medkits/weapons)
 - **Enemy bots** with simple chase/strafe/shoot behavior
 - **Shrinking safe zone** with increasing gas damage
-- **Visual rendering** via `render_mode="rgb_array"`
+- **Pygame-based visual rendering** with icons for loot/player/enemies
+- **Fog-of-war style observation**: nearby area is clear, far area is blurred/darkened
 - Gymnasium-compatible API (`reset`, `step`, observation/action spaces)
 
 ## Install
@@ -30,7 +31,12 @@ pip install -e .
 import gymnasium as gym
 import gym_battle_royale  # registers env
 
-env = gym.make("BattleRoyale2D-v0", enemy_count=30, render_mode="rgb_array")
+env = gym.make(
+    "BattleRoyale2D-v0",
+    enemy_count=30,
+    render_mode="rgb_array",
+    render_size=720,
+)
 obs, info = env.reset(seed=42)
 
 for _ in range(500):
@@ -46,13 +52,27 @@ print(info)
 ## Render modes
 
 - `render_mode="ansi"` (default behavior): returns compact text state.
-- `render_mode="rgb_array"`: returns a top-down image frame with:
-  - player (blue)
-  - enemies (red)
-  - loot by type color
-  - safe-zone ring + gas outside zone
-  - player aim line
-  - HP and armor HUD bars
+- `render_mode="rgb_array"`: returns a top-down RGB frame.
+- `render_mode="human"`: opens a pygame window and displays frames in real time.
+
+### What is drawn
+
+- Player and aim line
+- Enemies with health rings
+- Loot icons by type (ammo, medkit, armor, weapon)
+- Safe zone ring and gas overlay outside zone
+- HP and armor HUD bars
+- Observation spotlight (clear) with blurry/dark outer area
+
+## Demo: random-action video
+
+Generate a random-policy gameplay video:
+
+```bash
+PYTHONPATH=src python -m gym_battle_royale.demo
+```
+
+This writes `battle_royale_random.mp4` in the project root.
 
 ## Action space
 
@@ -101,5 +121,5 @@ UI-only actions (fullscreen map, minimap toggle, emotes, pings, settings) are in
 ## Notes
 
 - Designed for **single-player** training/evaluation.
-- Visual output is generated directly as a NumPy RGB frame.
-- You can extend this base with real-time windows (pygame), recoil, ballistic simulation, and richer bot policies.
+- Visual output is generated as NumPy RGB frames and can also be displayed via pygame window mode.
+- You can extend this base with richer bot behavior, recoil, ballistics, and terrain/obstacles.
