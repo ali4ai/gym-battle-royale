@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gym-battle-royale"
+version = "0.1.0"
+description = "A 2D single-player PUBG-like Gymnasium environment"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "gymnasium>=0.29",
+  "numpy>=1.24",
+  "pygame>=2.5",
+  "imageio>=2.34",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[project.optional-dependencies]
+train = [
+  "torch>=2.1",
+  "rsl-rl>=1.0",
+]
