@@ -74,6 +74,7 @@ def _serialize_state(
         "truncated": truncated,
         "info": info,
         "map_size": env.map_size,
+        "observation_radius": env.observation_radius,
         "zone": {
             "center": [float(env.zone_center[0]), float(env.zone_center[1])],
             "radius": float(env.zone_radius),
@@ -87,6 +88,13 @@ def _serialize_state(
             "medkits": int(env.player["medkits"]),
             "current_slot": int(env.player["current_slot"]),
             "weapon_slots": env.player["weapon_slots"],
+            "current_weapon": env.player["weapon_slots"][env.player["current_slot"]],
+            "current_mag": int(env.player["magazines"].get(env.player["weapon_slots"][env.player["current_slot"]], 0))
+            if env.player["weapon_slots"][env.player["current_slot"]] is not None
+            else 0,
+            "reserve_ammo": int(env.player["reserve_ammo"].get(env.player["weapon_slots"][env.player["current_slot"]], 0))
+            if env.player["weapon_slots"][env.player["current_slot"]] is not None
+            else 0,
         },
         "enemies": [
             {
@@ -123,7 +131,7 @@ def _compute_ai_action(env: BattleRoyale2DEnv) -> list[int]:
 async def game_socket(websocket: WebSocket) -> None:
     await websocket.accept()
 
-    env = BattleRoyale2DEnv(render_mode="ansi")
+    env = BattleRoyale2DEnv(render_mode="ansi", enemy_count=1)
     _, info = env.reset()
     current_action = ActionState()
     reward = 0.0

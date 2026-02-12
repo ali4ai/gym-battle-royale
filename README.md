@@ -180,3 +180,10 @@ Open `http://localhost:5173`.
 - Reset round: reset button in UI
 
 The backend pushes live game state and a simple AI-agent suggested action over `ws://localhost:8000/ws/game`.
+
+Frontend highlights:
+
+- Professional HUD with Font Awesome free icons
+- Fog-of-war view: only the agent observation radius is visible, unexplored areas stay black
+- Single-enemy duel mode in the web bridge with health bars for agent/enemy
+- Live weapon/ammo/armor/medkit stats on-screen
