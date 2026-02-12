@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gym Battle Royale Web Client</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Gym Battle Royale</h1>
+        <p>WASD move · Mouse aim · Space shoot · E loot · R reload · H heal</p>
+      </header>
+      <div class="content">
+        <canvas id="game" width="840" height="840"></canvas>
+        <aside>
+          <p id="status">Connecting…</p>
+          <p id="player-stats"></p>
+          <p id="ai-action"></p>
+          <button id="reset">Reset Round</button>
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>
