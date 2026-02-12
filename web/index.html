@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gym Battle Royale Web Client</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <h1><i class="fa-solid fa-crosshairs"></i> Gym Battle Royale</h1>
+        <div class="controls">
+          <span><i class="fa-solid fa-keyboard"></i> WASD Move</span>
+          <span><i class="fa-solid fa-mouse"></i> Mouse Aim</span>
+          <span><i class="fa-solid fa-gun"></i> Space Fire</span>
+          <span><i class="fa-solid fa-box-open"></i> E Loot</span>
+          <span><i class="fa-solid fa-kit-medical"></i> H Heal</span>
+        </div>
+      </header>
+
+      <div class="layout">
+        <section class="arena-shell">
+          <canvas id="game" width="900" height="900"></canvas>
+        </section>
+
+        <aside class="hud">
+          <h2><i class="fa-solid fa-display"></i> Match HUD</h2>
+          <p id="status">Connecting…</p>
+
+          <div class="panel">
+            <h3><i class="fa-solid fa-user-ninja"></i> Agent</h3>
+            <div class="health-track"><div id="agent-health" class="health-fill agent"></div></div>
+            <div class="armor-track"><div id="agent-armor" class="armor-fill"></div></div>
+            <p id="player-stats"></p>
+            <p id="weapon-stats"></p>
+          </div>
+
+          <div class="panel">
+            <h3><i class="fa-solid fa-skull-crossbones"></i> Enemy</h3>
+            <div class="health-track"><div id="enemy-health" class="health-fill enemy"></div></div>
+            <p id="enemy-stats"></p>
+          </div>
+
+          <div class="panel ai-panel">
+            <h3><i class="fa-solid fa-robot"></i> AI Suggested Action</h3>
+            <p id="ai-action"></p>
+          </div>
+
+          <button id="reset"><i class="fa-solid fa-rotate-right"></i> Reset Round</button>
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,159 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: #e5e7eb;
+  background: radial-gradient(circle at 20% 15%, #1f2937 0%, #0b1020 45%, #05070f 100%);
+}
+
+#app {
+  padding: 1rem 1.1rem 1.3rem;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #f8fafc;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.controls span {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(540px, 1fr) 340px;
+  gap: 1rem;
+}
+
+.arena-shell {
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.92), rgba(9, 13, 28, 0.92));
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 14px;
+  padding: 0.7rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+canvas {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  border-radius: 10px;
+  border: 1px solid rgba(99, 102, 241, 0.55);
+  background: #0d1526;
+}
+
+.hud {
+  background: linear-gradient(170deg, rgba(17, 24, 39, 0.94), rgba(8, 12, 24, 0.95));
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 14px;
+  padding: 0.85rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.hud h2 {
+  margin: 0 0 0.7rem;
+  font-size: 1.1rem;
+}
+
+.panel {
+  background: rgba(15, 23, 42, 0.62);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 0.65rem;
+  margin-bottom: 0.7rem;
+}
+
+.panel h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+  color: #cbd5e1;
+}
+
+.health-track,
+.armor-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.9);
+  overflow: hidden;
+  margin-bottom: 0.38rem;
+}
+
+.health-fill,
+.armor-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 120ms linear;
+}
+
+.health-fill.agent {
+  background: linear-gradient(90deg, #34d399, #22c55e);
+}
+
+.health-fill.enemy {
+  background: linear-gradient(90deg, #fb7185, #ef4444);
+}
+
+.armor-fill {
+  background: linear-gradient(90deg, #38bdf8, #3b82f6);
+}
+
+#status,
+#player-stats,
+#weapon-stats,
+#enemy-stats,
+#ai-action {
+  margin: 0.2rem 0;
+  font-size: 0.86rem;
+  color: #d1d5db;
+}
+
+.ai-panel {
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+button {
+  margin-top: 0.5rem;
+  width: 100%;
+  background: linear-gradient(120deg, #4f46e5, #2563eb);
+  color: white;
+  border: none;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+@media (max-width: 1180px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
