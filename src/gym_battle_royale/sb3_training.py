@@ -13,13 +13,13 @@ import gym_battle_royale  # noqa: F401 - registers env
 @dataclass
 class TrainConfig:
     num_envs: int = 8
-    enemy_count: int = 18
+    enemy_count: int = 1
     loot_count: int = 50
-    max_steps: int = 1800
+    max_steps: int = 2500
     total_timesteps: int = 1_000_000
     eval_episodes: int = 5
     seed: int = 1
-    device: str = "cpu"
+    device: str = "cuda"
     log_dir: str = "runs/sb3_battle_royale"
     learning_rate: float = 3e-4
     n_steps: int = 2048
@@ -112,14 +112,14 @@ def train(cfg: TrainConfig) -> Path:
 def parse_args() -> TrainConfig:
     parser = argparse.ArgumentParser(description="Train BattleRoyale2D with Stable-Baselines3 PPO")
     parser.add_argument("--num-envs", type=int, default=8)
-    parser.add_argument("--enemy-count", type=int, default=18)
+    parser.add_argument("--enemy-count", type=int, default=1)
     parser.add_argument("--loot-count", type=int, default=50)
-    parser.add_argument("--max-steps", type=int, default=1800)
-    parser.add_argument("--timesteps", type=int, default=1_000_000)
+    parser.add_argument("--max-steps", type=int, default=2500)
+    parser.add_argument("--timesteps", type=int, default=5_000_000)
     parser.add_argument("--eval-episodes", type=int, default=5)
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--log-dir", type=str, default="runs/sb3_battle_royale")
+    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--log-dir", type=str, default="runs/sb3_battle_royale_enemy_v2")
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--n-steps", type=int, default=2048)
     parser.add_argument("--batch-size", type=int, default=256)

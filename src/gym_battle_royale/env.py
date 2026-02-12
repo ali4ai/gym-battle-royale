@@ -45,7 +45,7 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
     def __init__(
         self,
         map_size: float = 180.0,
-        enemy_count: int = 23,
+        enemy_count: int = 1,
         loot_count: int = 60,
         max_steps: int = 2400,
         render_mode: str | None = None,
@@ -76,8 +76,8 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
         # move, aim_x, aim_y, attack, interact, reload, heal, switch weapon
         self.action_space = spaces.MultiDiscrete(np.array([9, 11, 11, 2, 2, 2, 2, 5]))
 
-        self.max_enemies_tracked = max(enemy_count, 32)
-        self.max_loot_tracked = max(loot_count, 80)
+        self.max_enemies_tracked = min(enemy_count, 1)
+        self.max_loot_tracked = min(loot_count, 20)
 
         self.observation_space = spaces.Dict(
             {
@@ -85,16 +85,16 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
                 "enemies": spaces.Box(
                     low=-1.0,
                     high=1.0,
-                    shape=(self.max_enemies_tracked, 6),
+                    shape=(self.max_enemies_tracked, 5),
                     dtype=np.float32,
                 ),
                 "loot": spaces.Box(
                     low=-1.0,
                     high=1.0,
-                    shape=(self.max_loot_tracked, 5),
+                    shape=(self.max_loot_tracked, 4),
                     dtype=np.float32,
                 ),
-                "zone": spaces.Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32),
+                "zone": spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32),
             }
         )
 
@@ -374,7 +374,7 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
     def _apply_zone_logic(self) -> float:
         # Shrink zone in phases, with increasing gas damage.
         phase = self.step_count // 280
-        target_radius = max(12.0, self.map_size * (0.48 - 0.06 * phase))
+        target_radius = max(20.0, self.map_size * (0.48 - 0.06 * phase))
         self.zone_radius = max(target_radius, self.zone_radius - 0.12)
 
         damage = 0.0
@@ -440,31 +440,40 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
             player[10] = mag / WEAPONS[current_weapon].magazine_size * 2 - 1
             player[11] = self.player["reserve_ammo"][current_weapon] / 120 * 2 - 1
 
-        enemies = np.zeros((self.max_enemies_tracked, 6), dtype=np.float32)
-        for i, enemy in enumerate(self.enemies[: self.max_enemies_tracked]):
-            enemies[i, 0:2] = enemy["pos"] / self.map_size * 2 - 1
-            enemies[i, 2] = enemy["health"] / 100 * 2 - 1
-            enemies[i, 3] = enemy["armor"] / 100 * 2 - 1
-            enemies[i, 4] = 1.0 if enemy["alive"] else -1.0
-            enemies[i, 5] = (
-                min(1.0, np.linalg.norm(enemy["pos"] - self.player["pos"]) / 40) * 2 - 1
-            )
+        enemies = np.zeros((self.max_enemies_tracked, 5), dtype=np.float32)
+        enemies_dist = np.array([np.linalg.norm(e["pos"]-self.player["pos"]) for e in self.enemies])
+        obs_dist = self.observation_radius
+        for j in range(self.max_enemies_tracked):
+            i = enemies_dist.argmin()
+            if enemies_dist.min()>obs_dist:
+                break
+            enemies_dist[i] = 1000
+            enemy = self.enemies[i]
+            enemies[j, 0:2] = (enemy["pos"] - self.player["pos"])/obs_dist
+            enemies[j, 2] = enemy["health"] / 100 * 2 - 1
+            enemies[j, 3] = enemy["armor"] / 100 * 2 - 1
+            enemies[j, 4] = 1.0 if enemy["alive"] else -1.0
 
-        loot = np.zeros((self.max_loot_tracked, 5), dtype=np.float32)
+        loot = np.zeros((self.max_loot_tracked, 4), dtype=np.float32)
+        loots_dist = np.array([np.linalg.norm(l["pos"]-self.player["pos"]) for l in self.loot])
         kind_map = {"ammo": -1.0, "medkit": -0.3, "armor": 0.3, "weapon": 1.0}
-        for i, item in enumerate(self.loot[: self.max_loot_tracked]):
-            loot[i, 0:2] = item["pos"] / self.map_size * 2 - 1
-            loot[i, 2] = kind_map[str(item["kind"])]
-            loot[i, 3] = item["value"] / 3.0 * 2 - 1
-            loot[i, 4] = (
-                min(1.0, np.linalg.norm(item["pos"] - self.player["pos"]) / 35) * 2 - 1
-            )
+        for j in range(self.max_loot_tracked):
+            i = loots_dist.argmin()
+            if loots_dist.min()>obs_dist:
+                break
+            loots_dist[i] = 1000
+            item = self.loot[i]
+            loot[j, 0:2] = (item["pos"] - self.player["pos"])/obs_dist
+            loot[j, 2] = kind_map[str(item["kind"])]
+            loot[j, 3] = item["value"] / 3.0 * 2 - 1
 
-        zone = np.zeros(4, dtype=np.float32)
-        zone[0:2] = self.zone_center / self.map_size * 2 - 1
-        zone[2] = self.zone_radius / (self.map_size * 0.5) * 2 - 1
+        zone = np.zeros(3, dtype=np.float32)
+        zone[0:2] = (self.zone_center - self.player["pos"])/ (self.zone_radius-15)
+        if (any(zone[0:2]<0)):
+            h = 1
+        #zone[2] = self.zone_radius / (self.map_size * 0.5) * 2 - 1
         zone_dist = np.linalg.norm(self.player["pos"] - self.zone_center)
-        zone[3] = min(1.0, zone_dist / max(1.0, self.zone_radius)) * 2 - 1
+        zone[2] = min(1.0, zone_dist / max(1.0, self.zone_radius)) * 2 - 1
 
         return {"player": player, "enemies": enemies, "loot": loot, "zone": zone}
 
