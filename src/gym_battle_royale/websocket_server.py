@@ -9,6 +9,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from gym_battle_royale.env import BattleRoyale2DEnv
 
+import gymnasium as gym
+import numpy as np
+from stable_baselines3 import PPO
+
 
 @dataclass
 class ActionState:
@@ -48,7 +52,7 @@ class ActionState:
 
 
 app = FastAPI(title="Gym Battle Royale WebSocket Bridge")
-
+model = PPO.load("runs/sb3_battle_royale_enemy_v2/best_model/best_model.zip")
 
 @app.get("/health")
 def health() -> dict[str, str]:
@@ -110,37 +114,9 @@ def _compute_ai_action(env: BattleRoyale2DEnv) -> list[int]:
     if not alive:
         return [0, 5, 5, 0, 0, 0, 0, 0]
 
-    player_pos = env.player["pos"]
-    nearest = min(alive, key=lambda e: float(np.linalg.norm(e["pos"] - player_pos)))
-    delta = nearest["pos"] - player_pos
-    dist = float(np.linalg.norm(delta))
-
-    if dist > 1e-5:
-        aim = delta / dist
-    else:
-        aim = np.array([1.0, 0.0], dtype=np.float32)
-
-    aim_x = int(np.clip(np.round(aim[0] * 5 + 5), 0, 10))
-    aim_y = int(np.clip(np.round(aim[1] * 5 + 5), 0, 10))
-
-    move_x = 0 if abs(delta[0]) < 1.5 else (1 if delta[0] > 0 else -1)
-    move_y = 0 if abs(delta[1]) < 1.5 else (1 if delta[1] > 0 else -1)
-    move_lookup = {
-        (0, 0): 0,
-        (0, -1): 1,
-        (0, 1): 2,
-        (-1, 0): 3,
-        (1, 0): 4,
-        (-1, -1): 5,
-        (1, -1): 6,
-        (-1, 1): 7,
-        (1, 1): 8,
-    }
-    move = move_lookup[(move_x, move_y)]
-
-    should_attack = int(dist <= 35.0)
-    should_heal = int(env.player["health"] < 40 and env.player["medkits"] > 0)
-    return [move, aim_x, aim_y, should_attack, 0, 0, should_heal, 0]
+    obs = env._build_obs()
+    action, _states = model.predict(obs, deterministic=True)
+    return action.tolist()
 
 
 @app.websocket("/ws/game")
@@ -177,7 +153,7 @@ async def game_socket(websocket: WebSocket) -> None:
                 reset_requested.clear()
 
             ai_action = _compute_ai_action(env)
-            _, reward, terminated, truncated, info = env.step(current_action.to_array())
+            _, reward, terminated, truncated, info = env.step(np.array(ai_action))
 
             await websocket.send_json(
                 {

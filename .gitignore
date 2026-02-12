@@ -5,3 +5,4 @@ __pycache__/
 
 runs/*
 *.mp4
+web/node_modules

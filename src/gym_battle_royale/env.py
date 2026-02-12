@@ -45,7 +45,7 @@ class BattleRoyale2DEnv(gym.Env[dict[str, np.ndarray], np.ndarray]):
     def __init__(
         self,
         map_size: float = 180.0,
-        enemy_count: int = 23,
+        enemy_count: int = 1,
         loot_count: int = 60,
         max_steps: int = 2400,
         render_mode: str | None = None,
