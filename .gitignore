@@ -1,2 +1,8 @@
 __pycache__/
 *.pyc
+*.egg-info
+
+
+runs/*
+*.mp4
+web/node_modules
