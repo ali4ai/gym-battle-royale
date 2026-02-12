@@ -24,8 +24,16 @@ type GameState = {
     reserve_ammo: number;
   };
   enemies: Array<{ pos: Vec2; health: number; alive: boolean }>;
-  loot: Array<{ pos: Vec2; kind: string }>;
+  loot: Array<{ pos: Vec2; kind: string; name?: string; amount?: number }>;
   ai_action: number[];
+};
+
+type LootAnimation = {
+  x: number;
+  y: number;
+  ttl: number;
+  kind: string;
+  by: 'agent' | 'enemy';
 };
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game');
@@ -61,6 +69,9 @@ if (!ctx) {
 
 const ws = new WebSocket('ws://localhost:8000/ws/game');
 let latestState: GameState | null = null;
+let lootAnimations: LootAnimation[] = [];
+let prevLootMap = new Map<string, { pos: Vec2; kind: string }>();
+
 const exploredMask = document.createElement('canvas');
 exploredMask.width = canvas.width;
 exploredMask.height = canvas.height;
@@ -79,6 +90,60 @@ const toCanvas = (pos: Vec2, mapSize: number): Vec2 => [
   (pos[1] / mapSize) * canvas.height,
 ];
 
+const lootKey = (item: { pos: Vec2; kind: string; name?: string; amount?: number }): string =>
+  `${item.kind}:${item.name ?? 'na'}:${item.amount ?? 0}:${Math.round(item.pos[0] * 10)}:${Math.round(item.pos[1] * 10)}`;
+
+const lootIcon = (kind: string): string => {
+  if (kind === 'weapon') return '🔫';
+  if (kind === 'medkit') return '🩹';
+  if (kind === 'armor') return '🛡️';
+  if (kind === 'ammo') return '📦';
+  return '✦';
+};
+
+const drawBadgeIcon = (x: number, y: number, bg: string, icon: string, size = 18) => {
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.font = '14px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(icon, x, y + 0.5);
+};
+
+const updateLootAnimations = (state: GameState) => {
+  const nextMap = new Map<string, { pos: Vec2; kind: string }>();
+  for (const item of state.loot) {
+    nextMap.set(lootKey(item), { pos: item.pos, kind: item.kind });
+  }
+
+  for (const [key, removed] of prevLootMap.entries()) {
+    if (nextMap.has(key)) continue;
+
+    const dPlayer = Math.hypot(removed.pos[0] - state.player.pos[0], removed.pos[1] - state.player.pos[1]);
+    const aliveEnemy = state.enemies.find((enemy) => enemy.alive);
+    const dEnemy = aliveEnemy
+      ? Math.hypot(removed.pos[0] - aliveEnemy.pos[0], removed.pos[1] - aliveEnemy.pos[1])
+      : Number.POSITIVE_INFINITY;
+
+    if (Math.min(dPlayer, dEnemy) > 8.0) continue;
+
+    const [cx, cy] = toCanvas(removed.pos, state.map_size);
+    lootAnimations.push({
+      x: cx,
+      y: cy,
+      ttl: 1,
+      kind: removed.kind,
+      by: dPlayer <= dEnemy ? 'agent' : 'enemy',
+    });
+  }
+
+  prevLootMap = nextMap;
+};
+
 const drawWorld = (state: GameState) => {
   ctx.fillStyle = '#0f172a';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -93,30 +158,24 @@ const drawWorld = (state: GameState) => {
 
   for (const item of state.loot) {
     const [x, y] = toCanvas(item.pos, state.map_size);
-    ctx.fillStyle = item.kind === 'weapon' ? '#f5f5f5' : item.kind === 'medkit' ? '#ef4444' : '#60a5fa';
-    ctx.fillRect(x - 3, y - 3, 6, 6);
+    const bg = item.kind === 'weapon' ? '#8b5cf6' : item.kind === 'medkit' ? '#ef4444' : item.kind === 'armor' ? '#0ea5e9' : '#f59e0b';
+    drawBadgeIcon(x, y, bg, lootIcon(item.kind), 16);
   }
 
   for (const enemy of state.enemies) {
     if (!enemy.alive) continue;
     const [x, y] = toCanvas(enemy.pos, state.map_size);
-    ctx.fillStyle = '#f97316';
-    ctx.beginPath();
-    ctx.arc(x, y, 8, 0, Math.PI * 2);
-    ctx.fill();
+    drawBadgeIcon(x, y, '#f97316', '☠', 22);
 
     const hp = Math.max(0, Math.min(1, enemy.health / 100));
     ctx.fillStyle = '#0b1220';
-    ctx.fillRect(x - 16, y - 16, 32, 5);
+    ctx.fillRect(x - 20, y - 20, 40, 6);
     ctx.fillStyle = '#ef4444';
-    ctx.fillRect(x - 16, y - 16, 32 * hp, 5);
+    ctx.fillRect(x - 20, y - 20, 40 * hp, 6);
   }
 
   const [px, py] = toCanvas(state.player.pos, state.map_size);
-  ctx.fillStyle = '#38bdf8';
-  ctx.beginPath();
-  ctx.arc(px, py, 9, 0, Math.PI * 2);
-  ctx.fill();
+  drawBadgeIcon(px, py, '#0ea5e9', '🧍', 24);
 
   const aimEnd: Vec2 = [px + state.player.aim[0] * 28, py + state.player.aim[1] * 28];
   ctx.strokeStyle = '#ffffff';
@@ -125,6 +184,31 @@ const drawWorld = (state: GameState) => {
   ctx.moveTo(px, py);
   ctx.lineTo(aimEnd[0], aimEnd[1]);
   ctx.stroke();
+};
+
+const drawLootAnimations = () => {
+  const nextAnimations: LootAnimation[] = [];
+
+  for (const anim of lootAnimations) {
+    const y = anim.y - (1 - anim.ttl) * 24;
+    const alpha = anim.ttl;
+    const label = `${anim.by === 'agent' ? 'AGENT' : 'ENEMY'} +${lootIcon(anim.kind)}`;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = 'bold 13px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = anim.by === 'agent' ? '#34d399' : '#fb7185';
+    ctx.fillText(label, anim.x, y);
+    ctx.restore();
+
+    const ttl = anim.ttl - 0.03;
+    if (ttl > 0) {
+      nextAnimations.push({ ...anim, ttl });
+    }
+  }
+
+  lootAnimations = nextAnimations;
 };
 
 const applyObservationFog = (state: GameState) => {
@@ -198,16 +282,17 @@ ws.onmessage = (event) => {
   const message = JSON.parse(event.data) as { type: string; payload: GameState };
   if (message.type !== 'game_state') return;
 
-  latestState = message.payload;
+  const nextState = message.payload;
+  updateLootAnimations(nextState);
+  latestState = nextState;
+
   const aliveEnemy = latestState.enemies.find((enemy) => enemy.alive);
   const aliveEnemies = latestState.enemies.filter((enemy) => enemy.alive).length;
   statusEl.textContent = `Step ${latestState.step} · Reward ${latestState.reward.toFixed(2)} · Enemy Alive ${aliveEnemies}`;
   playerStatsEl.textContent = `Kills ${latestState.player.kills} · Armor ${latestState.player.armor.toFixed(0)} · Medkits ${latestState.player.medkits}`;
   const weaponName = latestState.player.current_weapon ?? 'None';
   weaponStatsEl.textContent = `Weapon ${weaponName.toUpperCase()} · Ammo ${latestState.player.current_mag}/${latestState.player.reserve_ammo}`;
-  enemyStatsEl.textContent = aliveEnemy
-    ? `Enemy HP ${aliveEnemy.health.toFixed(0)} / 100`
-    : 'Enemy eliminated';
+  enemyStatsEl.textContent = aliveEnemy ? `Enemy HP ${aliveEnemy.health.toFixed(0)} / 100` : 'Enemy eliminated';
   aiActionEl.textContent = `[${latestState.ai_action.join(', ')}]`;
 
   agentHealthEl.style.width = `${Math.max(0, Math.min(100, latestState.player.health))}%`;
@@ -219,6 +304,8 @@ resetBtn.addEventListener('click', () => {
   if (ws.readyState !== WebSocket.OPEN) return;
   exploredCtx.fillStyle = 'black';
   exploredCtx.fillRect(0, 0, canvas.width, canvas.height);
+  lootAnimations = [];
+  prevLootMap = new Map();
   ws.send(JSON.stringify({ type: 'reset' }));
 });
 
@@ -248,6 +335,7 @@ const draw = () => {
   if (!latestState) return;
 
   drawWorld(latestState);
+  drawLootAnimations();
   applyObservationFog(latestState);
 };
 

@@ -187,3 +187,4 @@ Frontend highlights:
 - Fog-of-war view: only the agent observation radius is visible, unexplored areas stay black
 - Single-enemy duel mode in the web bridge with health bars for agent/enemy
 - Live weapon/ammo/armor/medkit stats on-screen
+- In-world icons for player/enemy/loot and floating loot-acquire animations
