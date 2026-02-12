@@ -147,3 +147,44 @@ UI-only actions (fullscreen map, minimap toggle, emotes, pings, settings) are in
 - Designed for **single-player** training/evaluation.
 - Visual output is generated as NumPy RGB frames and can also be displayed via pygame window mode.
 - You can extend this base with richer bot behavior, recoil, ballistics, and terrain/obstacles.
+
+
+## Web frontend + WebSocket backend bridge
+
+A browser-based TypeScript frontend and FastAPI WebSocket bridge are included.
+
+### 1) Start backend WebSocket service
+
+```bash
+PYTHONPATH=src uvicorn gym_battle_royale.websocket_server:app --host 0.0.0.0 --port 8000
+```
+
+### 2) Start frontend
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+### Controls
+
+- Move: `W/A/S/D` or arrow keys
+- Aim: mouse movement on canvas
+- Shoot: `Space`
+- Interact/Loot: `E`
+- Reload: `R`
+- Heal: `H`
+- Reset round: reset button in UI
+
+The backend pushes live game state and a simple AI-agent suggested action over `ws://localhost:8000/ws/game`.
+
+Frontend highlights:
+
+- Professional HUD with Font Awesome free icons
+- Fog-of-war view: only the agent observation radius is visible, unexplored areas stay black
+- Single-enemy duel mode in the web bridge with health bars for agent/enemy
+- Live weapon/ammo/armor/medkit stats on-screen
+- In-world icons for player/enemy/loot and floating loot-acquire animations
